@@ -45,11 +45,11 @@ class InputImages():
 
 
 class DebevecHDR():
-    def __init__(self, P, lam=1):
+    def __init__(self, P, lam=0.2):
         self.P = P
         self.N = samplePoints
         self.Nh = samplePointsh
-        self.lam = 1
+        self.lam = lam
 
         self.hdrImage = None
         self.zMatR = np.zeros([self.N, P], dtype=np.uint8)
@@ -86,7 +86,7 @@ class DebevecHDR():
                 wij = self.w(self.zMatR[i,j]+1)
                 A[k,self.zMatR[i,j]+1] = wij
                 A[k,n+i] = -wij
-                b[k,1] = wij * self.logSSMat[j]
+                b[k,0] = wij * self.logSSMat[j]
                 k += 1
 
         A[k, 129] = 1
@@ -99,6 +99,14 @@ class DebevecHDR():
             k += 1
 
         x, _, _, _ = np.linalg.lstsq(A, b)
+
+        import matplotlib.pyplot as plt
+        z = np.linspace(0, 255, 256)
+        y = np.reshape(x, (320))[:256]
+        print(y)
+        plt.plot(z, y, label='result')
+        plt.legend()
+        plt.show()
 
     def w(self, z):
         if z <= (zMax + zMin)/2:
@@ -113,4 +121,4 @@ if __name__ == '__main__':
     hdr = DebevecHDR(raw.nImages)
 
     hdr.sampleUniformly(raw)
-    
+    hdr.solveDevebec()
