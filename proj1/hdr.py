@@ -32,7 +32,7 @@ class InputImages():
             lines = [line for line in listFile]
             for line in lines:
                 line = line.split(' ')
-                filename2speed[line[0]] = math.log(float(line[1]))
+                filename2speed[line[0]] = math.log(1.0 /float(line[1]))
 
         for filename in filename2speed:
             self.img.append(cv2.imread(os.path.join(path, filename)))
@@ -45,18 +45,21 @@ class InputImages():
 
 
 class DebevecHDR():
-    def __init__(self, P, lam=0.2):
+    def __init__(self, P, lam=10):
         self.P = P
         self.N = samplePoints
         self.Nh = samplePointsh
         self.lam = lam
 
         self.hdrImage = None
-        self.zMatR = np.zeros([self.N, P], dtype=np.uint8)
-        self.zMatG = np.zeros([self.N, P], dtype=np.uint8)
-        self.zMatB = np.zeros([self.N, P], dtype=np.uint8)
+        self.zMat = np.zeros([self.N, P, 3], dtype=np.uint8) # N sample points x P images x (R, G, B) 3 channels (where self.zMat[;,;,0] represents R channel and so on)
         self.coord = []
         self.logSSMat = np.zeros(P)
+
+        # predeclare result matrix
+        self.xr = None
+        self.xg = None
+        self.xb = None
 
 
     def sampleUniformly(self, rawImages):
@@ -66,53 +69,70 @@ class DebevecHDR():
         for nh in range(self.Nh):
             for nw in range(int(self.N/self.Nh)):
                 self.coord.append(( int((2*nh+1)/(2*self.Nh) * rawImages.height), int((2*nw+1)/(2*self.N/self.Nh) * rawImages.width )))
-        print(self.coord)
 
         for p in range(self.P):
             self.logSSMat[p] = rawImages.logShutterSpeed[p]
             for n in range(self.N):
-                self.zMatR[n,p] = rawImages.img[p][self.coord[n][0],self.coord[n][1],0]
-                self.zMatG[n,p] = rawImages.img[p][self.coord[n][0],self.coord[n][1],1]
-                self.zMatB[n,p] = rawImages.img[p][self.coord[n][0],self.coord[n][1],2]
+                self.zMat[n,p,0] = rawImages.img[p][self.coord[n][0],self.coord[n][1],0]
+                self.zMat[n,p,1] = rawImages.img[p][self.coord[n][0],self.coord[n][1],1]
+                self.zMat[n,p,2] = rawImages.img[p][self.coord[n][0],self.coord[n][1],2]
+
 
     def solveDevebec(self):
         n = 256
-        A = np.zeros([self.N * self.P + n + 1, n + self.N])
-        b = np.zeros([self.N * self.P + n + 1, 1])
+        A = np.zeros([self.N * self.P + n - 1, n + self.N, 3])
+        b = np.zeros([self.N * self.P + n - 1, 1, 3])
 
-        k = 1
+        k = 0
         for i in range(self.N):
             for j in range(self.P):
-                wij = self.w(self.zMatR[i,j]+1)
-                A[k,self.zMatR[i,j]+1] = wij
-                A[k,n+i] = -wij
-                b[k,0] = wij * self.logSSMat[j]
+                for chan in range(3):
+                    wijc = self.w(self.zMat[i, j, chan])
+                    A[k,self.zMat[i, j, chan], chan ] = wijc
+                    A[k, n+i, chan] = -wijc
+                    b[k, 0, chan] = wijc * self.logSSMat[j]
                 k += 1
 
-        A[k, 129] = 1
+        A[k, 128, 0] = 1
+        A[k, 128, 1] = 1
+        A[k, 128, 2] = 1
         k += 1
 
         for i in range(n-2):
-            A[k,i] = self.lam * self.w(i+1)
-            A[k,i+1] = -2 * self.lam * self.w(i+1)
-            A[k, i+2] = self.lam * self.w(i+1)
+            for chan in range(3):
+                A[k, i, chan] = self.lam * self.w(i+1)
+                A[k, i+1, chan] = -2 * self.lam * self.w(i+1)
+                A[k, i+2, chan] = self.lam * self.w(i+1)
             k += 1
 
-        x, _, _, _ = np.linalg.lstsq(A, b)
+        self.xr, _, _, _ = np.linalg.lstsq(A[:,:,0], b[:,:,0], rcond=None)
+        self.xg, _, _, _ = np.linalg.lstsq(A[:,:,1], b[:,:,1], rcond=None)
+        self.xb, _, _, _ = np.linalg.lstsq(A[:,:,2], b[:,:,2], rcond=None)
 
+
+    def plotCurve(self):
+        if self.xr is None or self.xg is None or self.xb is None:
+            return
         import matplotlib.pyplot as plt
-        z = np.linspace(0, 255, 256)
-        y = np.reshape(x, (320))[:256]
-        print(y)
-        plt.plot(z, y, label='result')
+        n = 256
+        z = np.linspace(0, n-1, n)
+        yr = np.reshape(self.xr, (n + self.N))[:n]
+        yg = np.reshape(self.xg, (n + self.N))[:n]
+        yb = np.reshape(self.xb, (n + self.N))[:n]
+        plt.plot(yr, z, label='red', color='r')
+        plt.plot(yg, z, label='green', color='g')
+        plt.plot(yb, z, label='blue', color='b')
+        plt.title('Recovered response functions')
+        plt.xlabel('log exposure X')
+        plt.ylabel('pixel value Z')
         plt.legend()
         plt.show()
+        del plt
 
     def w(self, z):
         if z <= (zMax + zMin)/2:
             return (z - zMin)
         return (zMax - z)
-
 
 if __name__ == '__main__':
     raw = InputImages()
@@ -122,3 +142,4 @@ if __name__ == '__main__':
 
     hdr.sampleUniformly(raw)
     hdr.solveDevebec()
+    hdr.plotCurve()
