@@ -2,6 +2,7 @@
 
 import os
 import math
+import imageio
 import cv2
 import numpy as np
 
@@ -15,6 +16,7 @@ def w_func(z):
     if z <= (zMax + zMin)/2:
         return (z - zMin)
     return (zMax - z)
+
 
 
 class InputImages():
@@ -41,28 +43,22 @@ class InputImages():
                 filename2speed[line[0]] = math.log(1.0 /float(line[1]))
 
         for filename in filename2speed:
-            self.img.append(cv2.imread(os.path.join(path, filename)))
+            self.img.append(imageio.imread(os.path.join(path, filename)))
             self.logShutterTime.append(filename2speed[filename])
 
         self.nImages = len(self.img) # in example "memorial": 16 images
         self.height = np.size(self.img[0], 0) # in example "memorial": 768
         self.width = np.size(self.img[0], 1) # in example "memorial": 512
-        self.channels = np.size(self.img[0], 2) # in example "memorial": 3 (BGR)
+        self.channels = np.size(self.img[0], 2) # in example "memorial": 3 (RGB)
 
     def isAlignedRegion(self, h, w, p):
-        if self.img[p][h,w,0] == 255 and self.img[p][h,w,1] == 0 and self.img[p][h,w,2] == 0:
+        if self.img[p][h,w,0] == 0 and self.img[p][h,w,1] == 0 and self.img[p][h,w,2] == 255:
             return True
         return False
 
     def alignMask(self, p):
-        print('alignmask: {}'.format(p))
-        mask = np.zeros([self.height, self.width, self.channels], dtype=np.float32)
-        aligned = np.array([255, 0, 0], dtype=np.uint8)
-        for h in range(self.height):
-            for w in range(self.width):
-                if not np.array_equal(self.img[p][h,w,:], aligned):
-                    mask[h,w,:] = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-        print('alignmask: {} (end)'.format(p))
+        mask = np.all(self.img[p] != (0, 0, 255), axis=-1).astype(np.float32)
+        mask = np.tile(np.expand_dims(mask, axis=2), [1,1,3])
         return mask
 
 class DebevecHDR():
@@ -78,9 +74,9 @@ class DebevecHDR():
         self.logSSMat = np.zeros(P)
 
         # predeclare result matrix
-        self.xb = None
-        self.xg = None
         self.xr = None
+        self.xg = None
+        self.xb = None
 
 
     def sampleUniformly(self, rawImages):
@@ -108,7 +104,7 @@ class DebevecHDR():
         for i in range(self.N):
             for j in range(self.P):
                 for chan in range(3):
-                    wijc = self.w(self.zMat[i, j, chan])
+                    wijc = w_func(self.zMat[i, j, chan])
                     A[k,self.zMat[i, j, chan], chan ] = wijc
                     A[k, n+i, chan] = -wijc
                     b[k, 0, chan] = wijc * self.logSSMat[j]
@@ -121,14 +117,14 @@ class DebevecHDR():
 
         for i in range(n-2):
             for chan in range(3):
-                A[k, i, chan] = self.lam * self.w(i+1)
-                A[k, i+1, chan] = -2 * self.lam * self.w(i+1)
-                A[k, i+2, chan] = self.lam * self.w(i+1)
+                A[k, i, chan] = self.lam * w_func(i+1)
+                A[k, i+1, chan] = -2 * self.lam * w_func(i+1)
+                A[k, i+2, chan] = self.lam * w_func(i+1)
             k += 1
 
-        self.xb, _, _, _ = np.linalg.lstsq(A[:,:,0], b[:,:,0], rcond=None)
+        self.xr, _, _, _ = np.linalg.lstsq(A[:,:,0], b[:,:,0], rcond=None)
         self.xg, _, _, _ = np.linalg.lstsq(A[:,:,1], b[:,:,1], rcond=None)
-        self.xr, _, _, _ = np.linalg.lstsq(A[:,:,2], b[:,:,2], rcond=None)
+        self.xb, _, _, _ = np.linalg.lstsq(A[:,:,2], b[:,:,2], rcond=None)
 
 
     def plotCurve(self):
@@ -137,9 +133,9 @@ class DebevecHDR():
         import matplotlib.pyplot as plt
         n = 256
         z = np.linspace(0, n-1, n)
-        yb = np.reshape(self.xb, (n + self.N))[:n]
-        yg = np.reshape(self.xg, (n + self.N))[:n]
         yr = np.reshape(self.xr, (n + self.N))[:n]
+        yg = np.reshape(self.xg, (n + self.N))[:n]
+        yb = np.reshape(self.xb, (n + self.N))[:n]
         plt.plot(yr, z, label='red', color='r')
         plt.plot(yg, z, label='green', color='g')
         plt.plot(yb, z, label='blue', color='b')
@@ -162,9 +158,9 @@ class DebevecHDR():
             denoMat = denoMat + alignMask * w_vec(rawImages.img[p][:,:,:])
 
             takeMat = np.zeros([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32)
-            takeMat[:,:,0] = np.take(self.xb[0:256,0], rawImages.img[p][:,:,0])
+            takeMat[:,:,0] = np.take(self.xr[0:256,0], rawImages.img[p][:,:,0])
             takeMat[:,:,1] = np.take(self.xg[0:256,0], rawImages.img[p][:,:,1])
-            takeMat[:,:,2] = np.take(self.xr[0:256,0], rawImages.img[p][:,:,2])
+            takeMat[:,:,2] = np.take(self.xb[0:256,0], rawImages.img[p][:,:,2])
 
 
             numeMat = numeMat + alignMask * w_vec(rawImages.img[p][:,:,:]) * (takeMat - self.logSSMat[p] * np.ones([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32))
@@ -174,22 +170,13 @@ class DebevecHDR():
 
 
         self.hdrImage = self.hdrImage.astype(np.float32)
-        # swap R-B channels since different api used
-        # (opencv is (BGR), while imageio is (RGB))
-        self.hdrImage[:,:,[0,2]] = self.hdrImage[:,:,[2,0]]
         print(self.hdrImage)
 
     def outputHDR(self, path='out.hdr'):
         if self.hdrImage is None:
             return
-        import imageio
         imageio.imwrite(path, self.hdrImage, format='HDR-FI')
-        del imageio
 
-    def w(self, z):
-        if z <= (zMax + zMin)/2:
-            return (z - zMin)
-        return (zMax - z)
 
 if __name__ == '__main__':
     raw = InputImages()
