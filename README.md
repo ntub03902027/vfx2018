@@ -3,7 +3,7 @@ Project repositories for NTU VFX 2018 course
 ## Project 1
 ### Todos
 - [ ] alignment
-- [ ] HDR
+- [x] HDR
 - [ ] tone mapping
 - [ ] report
 ### Links
