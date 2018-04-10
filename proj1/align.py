@@ -95,10 +95,10 @@ class LDRImageSet():
     # pivot:    Index of the image every else is aligned to
     # shiftMax: Maximum search distance while doing alignment
     # tol:      tolerance, avoid noise near median
-    def MTBAlign(self, pivot=0, shiftMax=0.05, tol=10):
+    def MTBAlign(self, pivot=3, shiftMax=0.05, tol=5):
         # calculate the level to search
         shiftMaxPixel = shiftMax * min(self.imgWidth, self.imgHeight)
-        maxlvl = math.ceil(math.log2(shiftMaxPixel))
+        maxlvl = math.floor(math.log2(shiftMaxPixel))
         print('shiftMaxPixel:', shiftMaxPixel)
         print('maxlvl:', maxlvl)
 
@@ -150,8 +150,8 @@ class LDRImageSet():
 
         # displace(crop) the image
         for mtbImg in MTBSet:
-            resImg = displace(mtbImg.origin, -dmax+mtbImg.d)
-            resImg = displace(resImg, -dmin-mtbImg.d)
+            resImg = displace(mtbImg.origin, -(dmax-mtbImg.d))
+            resImg = displace(resImg, -(dmin-mtbImg.d))
             self.alignedSet.append(resImg)
 
 
