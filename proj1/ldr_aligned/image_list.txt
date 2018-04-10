@@ -1,0 +1,7 @@
+DSC_0355.png 0.125
+DSC_0356.png 0.25
+DSC_0357.png 0.5
+DSC_0358.png 1
+DSC_0359.png 2
+DSC_0360.png 4
+DSC_0361.png 8
