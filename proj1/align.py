@@ -109,7 +109,7 @@ class LDRImageSet():
             MTBSet.append(mtbImg)
 
         # find displacement for each image to match the pivot image
-        pivImg = MTBSet[pivot]
+        pivImg = MTBImg(self.rawSet[pivot])
         for mtbImg in MTBSet:
             # find displacement for each level
             for lvl in reversed(range(maxlvl+1)):
