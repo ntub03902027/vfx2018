@@ -5,10 +5,28 @@ import math
 import imageio
 import cv2
 import numpy as np
+import argparse
 
-examplePath = "./memorial"
-samplePoints = 64
-samplePointsh = 8
+def createParser():
+    parser = argparse.ArgumentParser(description='HDR radiance map generator')
+    parser.add_argument('--path', type=str, default='./ldr_aligned', metavar='PATH', help='path to the directory of the aligned images')
+    parser.add_argument('-l', type=float, default=10, metavar='l', help='Lambda value for recovered curve smoothness')
+    parser.add_argument('--sample-points', type=int, default=64, metavar='N', help='# of points to sample')
+    parser.add_argument('--sample-points-h', type=int, default=8, metavar='Nh', help='# of points to sample along the hight axis when using uniform sample')
+    parser.add_argument('--output', type=str, default='out.hdr', metavar='PATH', help='output map path')
+    parser.add_argument('--nofilter', action='store_true', default=False, help='do not use (0, 0, 255) to filter empty spaces due to alignment')
+    parser.add_argument('--plot-curve', action='store_true', default=False, help='plot recovered curve with matplotlib')
+    return parser
+
+
+parser = createParser()
+args = parser.parse_args()
+
+inputPath = args.path
+samplePoints = args.sample_points
+samplePointsh = args.sample_points_h
+outputPath = args.output
+
 zMin = 0-0.001
 zMax = 255+0.001
 
@@ -56,7 +74,10 @@ class InputImages():
             return True
         return False
 
-    def alignMask(self, p):
+    def alignMask(self, p, nofilter=False):
+        if nofilter:
+            mask = np.ones([self.height, self.width, self.channels]).astype(np.float32)
+            return mask
         mask = np.all(self.img[p] != (0, 0, 255), axis=-1).astype(np.float32)
         mask = np.tile(np.expand_dims(mask, axis=2), [1,1,3])
         return mask
@@ -146,7 +167,7 @@ class DebevecHDR():
         plt.show()
         del plt
 
-    def arrangeHDRImage(self, rawImages):
+    def arrangeHDRImage(self, rawImages, nofilter=False):
         self.hdrImage = np.zeros([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32)
         denoMat = np.zeros([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32)
         numeMat = np.zeros([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32)
@@ -154,7 +175,7 @@ class DebevecHDR():
         w_vec = np.vectorize(w_func)
 
         for p in range(rawImages.nImages):
-            alignMask = rawImages.alignMask(p)
+            alignMask = rawImages.alignMask(p, nofilter=nofilter)
             denoMat = denoMat + alignMask * w_vec(rawImages.img[p][:,:,:])
 
             takeMat = np.zeros([rawImages.height, rawImages.width, rawImages.channels], dtype=np.float32)
@@ -180,12 +201,13 @@ class DebevecHDR():
 
 if __name__ == '__main__':
     raw = InputImages()
-    raw.readImages(examplePath)
+    raw.readImages(inputPath)
     print(raw)
-    hdr = DebevecHDR(raw.nImages)
+    hdr = DebevecHDR(raw.nImages, lam=args.l)
 
     hdr.sampleUniformly(raw)
     hdr.solveDevebec()
-    # hdr.plotCurve()
-    hdr.arrangeHDRImage(raw)
-    hdr.outputHDR()
+    if args.plot_curve:
+        hdr.plotCurve()
+    hdr.arrangeHDRImage(raw, nofilter=args.nofilter)
+    hdr.outputHDR(outputPath)

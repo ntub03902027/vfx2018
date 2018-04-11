@@ -5,23 +5,37 @@ import math
 import imageio
 import cv2
 import numpy as np
+import argparse
 
 
+def createParser():
+    parser = argparse.ArgumentParser(description='Tone mapper')
+    parser.add_argument('--path', type=str, default='out.hdr', metavar='PATH', help='path to the HDR file')
+    parser.add_argument('--output', type=str, default='out.png', metavar='PATH', help='output image path')
+    parser.add_argument('--method', type=str, default='ReinhardSimple', metavar='M', help='choose methods (available: ReinhardSimple, ReinhardLocal, Drago)')
+    parser.add_argument('-b', type=float, default=0.85, metavar='b', help='Bias value for the Drago mathod (default: 0.85)')
+    parser.add_argument('-a', type=float, default=0.6, metavar='a', help='"a" value for the Reinhard methods (default: 0.6)')
+    parser.add_argument('-phi', type=float, default=15, metavar='phi', help='phi value for the ReinhardLocal methods (default: 15)')
+    return parser
 
-ldmax = 230.
-b = 0.65
-Zmin = 0.
-Zmax = 255.
 
-#ld = (ldmax * 0.01 / math.log10(np.max(hdr) + 1)) * (np.log(hdr + 1.) / np.log(2. + 8. * (hdr / np.max(hdr))**(math.log(b)/math.log(0.5)) ))
+def tonemapDrago(hdr, b=0.85, output='out.png'):
+    ldmax = 100.
+    lwmax = 230.
 
-#print(ld)
 
-#ld = (Zmax - Zmin) / (np.max(ld)-np.min(ld)) * ld
-#ld = ld.astype(np.uint8)
-#print(ld)
+    lw = 0.2126 * hdr[:,:,0] + 0.7152 * hdr[:,:,1] + 0.0722 * hdr[:,:,2]
 
-#imageio.imwrite('out.png', ld)
+    ld = (ldmax * 0.01 / math.log10(lwmax + 1.)) * (np.log(lw + 1.) / np.log(2.+((lw / lwmax)**(math.log(b)/math.log(0.5))) * 8.))
+
+    hsv = cv2.cvtColor(hdr, cv2.COLOR_RGB2HSV)
+
+    hsv[:,:,2] = ld
+    hdr_mod = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    hdr_mod = np.clip(hdr_mod * 255., 0, 255).astype(np.uint8)
+
+
+    imageio.imwrite(output, hdr_mod)
 
 
 def tonemapReinhardSimple(hdr, a=0.6, output='out.png'):
@@ -104,7 +118,16 @@ def tonemapReinhardLocal(hdr, a=0.6, phi=15., output='out.png'):
 
 if __name__ == '__main__':
 
-    hdr = imageio.imread('memorial/info/memorial.hdr', format='HDR-FI')
+    parser = createParser()
+    args = parser.parse_args()
 
-    tonemapReinhardSimple(hdr, a=0.6)
-    tonemapReinhardLocal(hdr, a=0.6, phi=10)
+    hdr = imageio.imread(args.path, format='HDR-FI')
+
+    if args.method == 'ReinhardSimple':
+        tonemapReinhardSimple(hdr, a=args.a, output=args.output)
+    elif args.method == 'ReinhardLocal':
+        tonemapReinhardLocal(hdr, a=args.a, phi=args.phi, output=args.output)
+    elif args.method == 'Drago':
+        tonemapDrago(hdr, b=args.b, output=args.output)
+    else:
+        print("Unknown method! Exit.")
