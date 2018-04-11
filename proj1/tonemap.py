@@ -120,6 +120,7 @@ if __name__ == '__main__':
 
     parser = createParser()
     args = parser.parse_args()
+    imageio.plugins.freeimage.download()
 
     hdr = imageio.imread(args.path, format='HDR-FI')
 

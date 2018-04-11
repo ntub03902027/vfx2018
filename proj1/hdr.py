@@ -10,9 +10,9 @@ import argparse
 def createParser():
     parser = argparse.ArgumentParser(description='HDR radiance map generator')
     parser.add_argument('--path', type=str, default='./ldr_aligned', metavar='PATH', help='path to the directory of the aligned images')
-    parser.add_argument('-l', type=float, default=10, metavar='l', help='Lambda value for recovered curve smoothness')
-    parser.add_argument('--sample-points', type=int, default=64, metavar='N', help='# of points to sample')
-    parser.add_argument('--sample-points-h', type=int, default=8, metavar='Nh', help='# of points to sample along the hight axis when using uniform sample')
+    parser.add_argument('-l', type=float, default=10, metavar='l', help='Lambda value for recovered curve smoothness (default: 10)')
+    parser.add_argument('--sample-points', type=int, default=64, metavar='N', help='# of points to sample (default: 64)')
+    parser.add_argument('--sample-points-h', type=int, default=8, metavar='Nh', help='# of points to sample along the hight axis when using uniform sample (default: 8)')
     parser.add_argument('--output', type=str, default='out.hdr', metavar='PATH', help='output map path')
     parser.add_argument('--nofilter', action='store_true', default=False, help='do not use (0, 0, 255) to filter empty spaces due to alignment')
     parser.add_argument('--plot-curve', action='store_true', default=False, help='plot recovered curve with matplotlib')
@@ -21,6 +21,7 @@ def createParser():
 
 parser = createParser()
 args = parser.parse_args()
+imageio.plugins.freeimage.download()
 
 inputPath = args.path
 samplePoints = args.sample_points
