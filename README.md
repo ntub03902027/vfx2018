@@ -5,7 +5,7 @@ Project repositories for NTU VFX 2018 course
 - [x] alignment
 - [x] HDR
 - [x] tone mapping
-- [ ] report
+- [x] report
 ### Links
  - Photos: see [here](https://drive.google.com/drive/folders/1n2MRS0dnZUqbpp71UaaZQJfI-Meora64?usp=sharing)
  - [HDR Example](https://www.learnopencv.com/high-dynamic-range-hdr-imaging-using-opencv-cpp-python/)
@@ -17,3 +17,12 @@ Project repositories for NTU VFX 2018 course
   - `numpy`
   - `opencv-python` (alt. `opencv-contrib-python`)
   - `matplotlib` (for plotting and debugging)
+## Project 2
+### Todos
+- implement "recognizing panoramas"
+    - [ ] feature detection (SIFT, Harris, MSOP)
+    - [ ] feature matching
+    - [ ] image matching
+    - [ ] blending
+- [ ] bonus (optional)
+- [ ] report
