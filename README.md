@@ -26,3 +26,5 @@ Project repositories for NTU VFX 2018 course
     - [ ] blending
 - [ ] bonus (optional)
 - [ ] report
+### Note
+My teammate, where are you?

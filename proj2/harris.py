@@ -3,7 +3,9 @@
 import os
 import numpy as np
 import cv2
-import scipy.spatial.ckdtree as kdTree
+import scipy.spatial.ckdtree as KDTree
+import sys
+
 
 testpath = 'test/parrington'
 nImages = 18
@@ -52,7 +54,6 @@ Harris corner detection:
 """
 def harrisCornerDetection(image):
 
-    print("Harris corner detecting...")
     # k: empricially 0.04 - 0.06
     k = 0.05
     
@@ -83,7 +84,7 @@ def harrisCornerDetection(image):
 
     # find the N largest points as features
 
-    N = 1024
+    N = 2048
     
     arr = abs(R.reshape([R.shape[0] * R.shape[1]]))
     largest = arr.argsort()[-N:][::-1] # argsort: sort corresponding index from lowest to largest; [-N:]: the last N (i.e. largest) elements; [::-1]: reverse ordering
@@ -121,11 +122,79 @@ def harrisCornerDetection(image):
     cv2.destroyAllWindows()
 
 
+def featureMatching(des1, des2, k=4):
+    kdtree2 = KDTree.cKDTree(des2)
+
+    nn = []
+
+    n = 0
+    for d1 in des1:
+        d, i = kdtree2.query([d1], k=k)
+        nn.append((n, d, i))
+        #print(n, d) 
+        n += 1
+
+    nn = sorted(nn, key=lambda a: a[1][0][0])
+    
+    for x in nn:
+        print(x)
+
+    return nn
+   
+def printFeatureMatchPoints(nn, image1, image2, fPoint1, fPoint2):
+
+    a = np.zeros([image1.shape[0], 2 * image1.shape[1], image1.shape[2]], dtype=np.uint8)
+    grayscale1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
+    grayscale2 = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)
+    for i in range(a.shape[0]):
+        for j in range(int(a.shape[1] / 2)):
+            a[i,j,0] = grayscale1[i,j]
+            a[i,j,1] = grayscale1[i,j]
+            a[i,j,2] = grayscale1[i,j]
+            a[i,j+image1.shape[1],0] = grayscale2[i,j]
+            a[i,j+image1.shape[1],1] = grayscale2[i,j]
+            a[i,j+image1.shape[1],2] = grayscale2[i,j]
+   
+    for fPoint in fPoint1:
+        a[fPoint[0],fPoint[1],0] = 255
+        a[fPoint[0],fPoint[1],1] = 0
+        a[fPoint[0],fPoint[1],2] = 0
+    for fPoint in fPoint2:
+        a[fPoint[0],fPoint[1]+ image1.shape[1],0] = 255
+        a[fPoint[0],fPoint[1]+ image1.shape[1],1] = 0
+        a[fPoint[0],fPoint[1]+ image1.shape[1],2] = 0
+
+    # caution, when drawing a line, the coord is (y, x), not (x, y)!!!!!!!!!!!!!!!!
+    
+    for x in nn:
+        if x[1][0][0] < 200. and x[1][0][0] <= 0.8 * x[1][0][1]:
+            cv2.line(a, (fPoint1[x[0]][1], fPoint1[x[0]][0]), (fPoint2[x[2][0][0]][1] + image1.shape[1], fPoint2[x[2][0][0]][0] ), (55,555,155) )
+            pass
+
+    cv2.imshow('image', a)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
 if __name__ == '__main__':
     images = {}
     fPoints = {}
     descriptors = {}
-    for i in range(nImages):
+#    kdtrees = {}
+    for i in range(2):#nImages):
         images[i] = cv2.imread(os.path.join(testpath, getImageFilename(i, prefix=pre, suffix=suf, digit=2)))
+        sys.stdout.write("\r ({}/{}) Harris corner detecting...".format(i+1, nImages))
+        sys.stdout.flush()
         fPoints[i], descriptors[i] = harrisCornerDetection(images[i])
-    
+#        kdtrees[i] = kdtree.cKDTree(descriptors[i])
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+    nn = featureMatching(descriptors[0], descriptors[1])
+    printFeatureMatchPoints(nn, images[0], images[1], fPoints[0], fPoints[1])
+
+
+
+
+
+
