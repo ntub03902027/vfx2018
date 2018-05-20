@@ -23,8 +23,8 @@ Project repositories for NTU VFX 2018 course
     - [x] cylindrical projection
     - [x] feature detection (SIFT, Harris, MSOP)
     - [x] feature matching
-    - [ ] image matching
-    - [ ] blending
+    - [x] image matching (RANSAC, translation)
+    - [x] blending (linear, need refinement)
 - [ ] bonus (optional)
 - [ ] report
 ### Note

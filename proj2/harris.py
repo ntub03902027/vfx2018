@@ -8,6 +8,7 @@ import scipy.spatial.ckdtree as KDTree
 import sys
 import math
 import random
+import copy
 
 testpath = 'test/parrington'
 nImages = 18
@@ -23,7 +24,7 @@ def getImageFilename(i, prefix='', suffix='', digit=0):
         n = 0
     return prefix + n * '0' + str(i) + suffix
     
-def cylindricalProjection(image, f, showImage=True):
+def cylindricalProjection(image, f, showResult=False):
     xCen = int(image.shape[1] / 2)
     yCen = int(image.shape[0] / 2)
     cImage = np.zeros([image.shape[0], image.shape[1], image.shape[2]], dtype=np.uint8)
@@ -61,7 +62,7 @@ def cylindricalProjection(image, f, showImage=True):
 
     cImage = cImage[up:down+1,left:right+1,:]
 
-    if showImage:
+    if showResult:
         cv2.imshow('image', cImage)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -118,7 +119,7 @@ Harris corner detection:
     INPUT: an rgb image
     OUTPUT:
 """
-def harrisCornerDetection(image, showResult=True):
+def harrisCornerDetection(image, showResult=False):
 
     # k: empricially 0.04 - 0.06
     k = 0.05
@@ -194,7 +195,7 @@ def harrisCornerDetection(image, showResult=True):
 
     if showResult:
     # output featured image
-        fImage = image
+        fImage = copy.copy(image)
         for point in fPointOld:
             if point in fPoint:
                 fImage[point[0],point[1],0] = 255
@@ -277,14 +278,82 @@ def printFeatureMatchPoints(matchedPoints, image1, image2, fPoint1, fPoint2):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+def imageStitch(trans, image1, image2, printResult=True):
+    result = np.zeros([max(image1.shape[0] + abs(trans[0]), image2.shape[0]), max(image1.shape[1] + abs(trans[1]), image2.shape[1]), image1.shape[2]], dtype=np.uint8)
 
-def ransac(matchedPoints, fPoints1, fPoints2, n=2, p=0.6, P=0.99):
-    k = math.ceil(math.log(1-P)/math.log(1-p**n))
+    startX1 = abs(min(trans[0], 0))
+    startY1 = abs(min(trans[1], 0))
+
+    startX2 = abs(max(trans[0], 0))
+    startY2 = abs(max(trans[1], 0))
+
+    for i in range(image1.shape[0]):
+        for j in range(image1.shape[1]):
+            result[i+startX1,j+startY1,0] = image1[i,j,0]
+            result[i+startX1,j+startY1,1] = image1[i,j,1]
+            result[i+startX1,j+startY1,2] = image1[i,j,2]
+   
+    yOverlap = image1.shape[1] + image2.shape[1] - result.shape[1]
+    for i in range(image2.shape[0]):
+        for j in range(image2.shape[1]):
+            if result[i+startX2,j+startY2,0] == 0 and result[i+startX2,j+startY2,1] == 0 and result[i+startX2,j+startY2,2] == 0:
+                result[i+startX2,j+startY2,:] = image2[i,j,:]
+            else:
+                # blending
+                coef = float(trans[1] > 0) + (float(trans[1] <= 0) - float(trans[1] > 0))* ((j+startY2) - abs(trans[1])) / yOverlap 
+                result[i+startX2,j+startY2,:] = (coef * image2[i,j,:] + (1. - coef) * result[i+startX2,j+startY2,:]).astype(np.uint8)
+                pass
+
+    if printResult:
+        cv2.imshow('image', result)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    
+    return result
 
 
+
+def ransac(matchedPoints, fPoints1, fPoints2, n=2, p=0.6, P=0.99, kMin=64):
+    k = max(math.ceil(math.log(1-P)/math.log(1-p**n)), kMin)
+
+    transX = 0
+    transY = 0
+    
+    cMax = 0
+    dMin = math.inf
     for i in range(k):
         random.shuffle(matchedPoints)
+        tmpTransX = 0
+        tmpTransY = 0
+        for j in range(n):
+            tmpTransX += fPoints1[matchedPoints[j][0]][0] - fPoints2[matchedPoints[j][1]][0] 
+            tmpTransY += fPoints1[matchedPoints[j][0]][1] - fPoints2[matchedPoints[j][1]][1]
+
+        tmpTransX = int(tmpTransX / n)
+        tmpTransY = int(tmpTransY / n)
+
+        # check inliers
+        c = 0
+        dist = 0.
+        for j in range(n, len(matchedPoints)):
+            d = math.sqrt( ( (np.array(fPoints2[matchedPoints[j][1]]) + np.array([tmpTransX, tmpTransY]) - np.array(fPoints1[matchedPoints[j][0]]) )**2).sum())
+            if d <= 3:
+                dist += d
+                c += 1
         
+        if c > cMax:
+            transX = tmpTransX
+            transY = tmpTransY
+            cMax = c
+            dMin = dist
+        elif c == cMax and dist < dMin:
+            transX = tmpTransX
+            transY = tmpTransY
+            dMin = dist
+
+    print(transX, transY, cMax)
+        
+    return (transX, transY)
 
 def readPanoCSV():
 
@@ -311,20 +380,39 @@ if __name__ == '__main__':
     fPoints = {}
     descriptors = {}
 #    kdtrees = {}
-    for i in range(2):#nImages):
+    for i in range(nImages):
         images[i] = cv2.imread(os.path.join(testpath, fileTable[i][0]))
-        images[i] = cylindricalProjection(images[i], fileTable[i][1])
+        sys.stdout.write("\r ({}/{}) Projecting to cylinder...".format(i+1, nImages))
+        sys.stdout.flush()
+        images[i] = cylindricalProjection(images[i], fileTable[i][1], showResult=False)
+        
         sys.stdout.write("\r ({}/{}) Harris corner detecting...".format(i+1, nImages))
         sys.stdout.flush()
-        fPoints[i], descriptors[i] = harrisCornerDetection(images[i])
+        fPoints[i], descriptors[i] = harrisCornerDetection(images[i], showResult=False)
 #        kdtrees[i] = kdtree.cKDTree(descriptors[i])
     sys.stdout.write("\n")
     sys.stdout.flush()
 
-    matchedPoints = featureMatching(descriptors[0], descriptors[1])
-    printFeatureMatchPoints(matchedPoints, images[0], images[1], fPoints[0], fPoints[1])
+    matchedPoints = {}
+    trans = {}
+    for i in range(nImages-1):
+
+        sys.stdout.write("\r ({}/{}) Featuring matching...".format(i+1, nImages))
+        sys.stdout.flush()
+        matchedPoints[i] = featureMatching(descriptors[i], descriptors[i+1])
 
 
+        sys.stdout.write("\r ({}/{}) Running RANSAC...".format(i+1, nImages))
+        sys.stdout.flush()
+        printFeatureMatchPoints(matchedPoints[i], images[i], images[i+1], fPoints[i], fPoints[i+1])
+        trans[i] = ransac(matchedPoints[i], fPoints[i], fPoints[i+1])
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+    
+    result = imageStitch(trans[0], images[0], images[1])
+    for i in range(1, nImages-1):
+        result = imageStitch(trans[i], result, images[i+1])
 
 
 
