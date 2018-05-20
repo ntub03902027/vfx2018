@@ -1,11 +1,13 @@
 #! /usr/bin/env python
 
 import os
+import csv
 import numpy as np
 import cv2
 import scipy.spatial.ckdtree as KDTree
 import sys
-
+import math
+import random
 
 testpath = 'test/parrington'
 nImages = 18
@@ -21,7 +23,68 @@ def getImageFilename(i, prefix='', suffix='', digit=0):
         n = 0
     return prefix + n * '0' + str(i) + suffix
     
+def cylindricalProjection(image, f, showImage=True):
+    xCen = int(image.shape[1] / 2)
+    yCen = int(image.shape[0] / 2)
+    cImage = np.zeros([image.shape[0], image.shape[1], image.shape[2]], dtype=np.uint8)
 
+    s = f
+    for i in range(cImage.shape[1]):
+        for j in range(cImage.shape[0]):
+            x = i - xCen
+            y = j - yCen
+            theta = math.asin(x / math.sqrt(x**2 + f**2))
+            h = y / math.sqrt(x**2 + f**2)
+
+            xc = int(s * theta + xCen)
+            yc = int(s * h + yCen)
+            
+            if xc >= 0 and xc < cImage.shape[1] and yc >= 0 and yc < cImage.shape[0]:
+                cImage[yc,xc,0] = image[j,i,0]
+                cImage[yc,xc,1] = image[j,i,1]
+                cImage[yc,xc,2] = image[j,i,2]
+
+
+    # crop left/right/up/down blankings
+    left = 0
+    right = cImage.shape[1] - 1
+    up = 0
+    down = cImage.shape[0] - 1
+    while isBlank(cImage, left):
+        left += 1
+    while isBlank(cImage, right):
+        right -= 1
+    while isBlank(cImage, up, horizontal=True):
+        up += 1
+    while isBlank(cImage, down, horizontal=True):
+        down -= 1
+
+    cImage = cImage[up:down+1,left:right+1,:]
+
+    if showImage:
+        cv2.imshow('image', cImage)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    
+    
+    return cImage
+
+def isBlank(image, i, horizontal=False):
+    flag = True
+    if horizontal:
+        for j in range(image.shape[1]):
+            if image[i,j,0] != 0 or image[i,j,1] != 0 or image[i,j,2] != 0:
+                flag = False
+                break
+    else:
+        for j in range(image.shape[0]):
+            if image[j,i,0] != 0 or image[j,i,1] != 0 or image[j,i,2] != 0:
+                flag = False
+                break
+
+    return flag
+
+    pass
 
 """
     the descriptor vector will be (2 * size - 1)**2
@@ -40,6 +103,9 @@ def harrisDescriptor(image, fPoint, size):
                     vec.append(0)
                 else:
                     vec.append(image[i,j])
+        
+        # put the vertical coordinate into the descriptor is based on the assumption that the vertical differences between the two feature points should be small
+        vec.append(point[0])
 
         des.append(vec)
 
@@ -86,7 +152,7 @@ def harrisCornerDetection(image, showResult=True):
     # find the N largest points as features
 
     #N = 2048
-    N = int(R.shape[0] * R.shape[1] * 0.01 * 3) # highest i%
+    N = int(R.shape[0] * R.shape[1] * 0.01 * 5) # highest i%
     
     arr = abs(R.reshape([R.shape[0] * R.shape[1]]))
     largest = arr.argsort()[-N:][::-1] # argsort: sort corresponding index from lowest to largest; [-N:]: the last N (i.e. largest) elements; [::-1]: reverse ordering
@@ -95,13 +161,20 @@ def harrisCornerDetection(image, showResult=True):
     fPoint = list(zip(x.tolist(), y.tolist()))
 
     # remove edge features
+    # remove features due to cylindrical projection
+    maxDistort = 0
+    while image[maxDistort,0,0] == 0 and image[maxDistort,0,1] == 0 and image[maxDistort,0,2] == 0: 
+        maxDistort += 1
+
+    
     tmp = []
     for p in fPoint:
-        if p[0] < 2 or p[1] < 2 or p[0] >= R.shape[0] - 2 or p[1] >= R.shape[1] - 2:
+        if p[0] < maxDistort + 5 or p[1] < 2 or p[0] >= R.shape[0] - maxDistort - 6 or p[1] >= R.shape[1] - 2:
             tmp.append(p)
     for p in tmp:
         fPoint.remove(p)
     del tmp
+
 
     # 2*2 max pooling
     maxPool = set({})
@@ -164,7 +237,7 @@ def featureMatching(des1, des2, k=4):
     matchedPoints = []
     for x in nn:
         print(x)
-        if x[1][0][0] < 175. and x[1][0][0] <= 0.72 * x[1][0][1]:
+        if x[1][0][0] < 175. and x[1][0][0] <= 0.7 * x[1][0][1]:
             matchedPoints.append((x[0], x[2][0][0]))
     
     # return a list of matched points of format 2-tuple: ([ind of 1st fPoint], [ind of 2nd fPoint])
@@ -205,13 +278,42 @@ def printFeatureMatchPoints(matchedPoints, image1, image2, fPoint1, fPoint2):
     cv2.destroyAllWindows()
 
 
+def ransac(matchedPoints, fPoints1, fPoints2, n=2, p=0.6, P=0.99):
+    k = math.ceil(math.log(1-P)/math.log(1-p**n))
+
+
+    for i in range(k):
+        random.shuffle(matchedPoints)
+        
+
+def readPanoCSV():
+
+    fileTable = []
+    # csv format: filename(str),focal(float)
+    with open('test/parrington/pano.csv') as csvfile:
+        rows = csv.reader(csvfile)
+        flag = False
+        for row in rows:
+            if flag:
+                row[1] = float(row[1])
+                fileTable.append(row)
+            else:
+                flag = True
+    return fileTable
+
+
 if __name__ == '__main__':
+
+
+    fileTable = readPanoCSV() 
+    
     images = {}
     fPoints = {}
     descriptors = {}
 #    kdtrees = {}
     for i in range(2):#nImages):
-        images[i] = cv2.imread(os.path.join(testpath, getImageFilename(i, prefix=pre, suffix=suf, digit=2)))
+        images[i] = cv2.imread(os.path.join(testpath, fileTable[i][0]))
+        images[i] = cylindricalProjection(images[i], fileTable[i][1])
         sys.stdout.write("\r ({}/{}) Harris corner detecting...".format(i+1, nImages))
         sys.stdout.flush()
         fPoints[i], descriptors[i] = harrisCornerDetection(images[i])

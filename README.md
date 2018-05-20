@@ -20,6 +20,7 @@ Project repositories for NTU VFX 2018 course
 ## Project 2
 ### Todos
 - implement "recognizing panoramas"
+    - [x] cylindrical projection
     - [x] feature detection (SIFT, Harris, MSOP)
     - [x] feature matching
     - [ ] image matching
