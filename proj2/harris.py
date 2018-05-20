@@ -160,12 +160,18 @@ def featureMatching(des1, des2, k=4):
 
     nn = sorted(nn, key=lambda a: a[1][0][0])
     
+    
+    matchedPoints = []
     for x in nn:
         print(x)
+        if x[1][0][0] < 175. and x[1][0][0] <= 0.72 * x[1][0][1]:
+            matchedPoints.append((x[0], x[2][0][0]))
+    
+    # return a list of matched points of format 2-tuple: ([ind of 1st fPoint], [ind of 2nd fPoint])
+    return matchedPoints
 
-    return nn
    
-def printFeatureMatchPoints(nn, image1, image2, fPoint1, fPoint2):
+def printFeatureMatchPoints(matchedPoints, image1, image2, fPoint1, fPoint2):
 
     a = np.zeros([image1.shape[0], 2 * image1.shape[1], image1.shape[2]], dtype=np.uint8)
     grayscale1 = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
@@ -190,10 +196,9 @@ def printFeatureMatchPoints(nn, image1, image2, fPoint1, fPoint2):
 
     # caution, when drawing a line, the coord is (y, x), not (x, y)!!!!!!!!!!!!!!!!
     
-    for x in nn:
-        if x[1][0][0] < 175. and x[1][0][0] <= 0.72 * x[1][0][1]:
-            cv2.line(a, (fPoint1[x[0]][1], fPoint1[x[0]][0]), (fPoint2[x[2][0][0]][1] + image1.shape[1], fPoint2[x[2][0][0]][0] ), (55,555,155) )
-            pass
+    for x in matchedPoints:
+        cv2.line(a, (fPoint1[x[0]][1], fPoint1[x[0]][0]), (fPoint2[x[1]][1] + image1.shape[1], fPoint2[x[1]][0]), (55, 255, 155) )
+        pass
 
     cv2.imshow('image', a)
     cv2.waitKey(0)
@@ -214,8 +219,8 @@ if __name__ == '__main__':
     sys.stdout.write("\n")
     sys.stdout.flush()
 
-    nn = featureMatching(descriptors[0], descriptors[1])
-    printFeatureMatchPoints(nn, images[0], images[1], fPoints[0], fPoints[1])
+    matchedPoints = featureMatching(descriptors[0], descriptors[1])
+    printFeatureMatchPoints(matchedPoints, images[0], images[1], fPoints[0], fPoints[1])
 
 
 
