@@ -52,7 +52,7 @@ Harris corner detection:
     INPUT: an rgb image
     OUTPUT:
 """
-def harrisCornerDetection(image):
+def harrisCornerDetection(image, showResult=True):
 
     # k: empricially 0.04 - 0.06
     k = 0.05
@@ -82,9 +82,11 @@ def harrisCornerDetection(image):
             Mij = np.array([[S_xx[i,j], S_xy[i,j]], [S_xy[i,j], S_yy[i,j]]])
             R[i,j] = np.linalg.det(Mij) - k * (np.trace(Mij) ** 2)
 
+    # 5.
     # find the N largest points as features
 
-    N = 2048
+    #N = 2048
+    N = int(R.shape[0] * R.shape[1] * 0.01 * 3) # highest i%
     
     arr = abs(R.reshape([R.shape[0] * R.shape[1]]))
     largest = arr.argsort()[-N:][::-1] # argsort: sort corresponding index from lowest to largest; [-N:]: the last N (i.e. largest) elements; [::-1]: reverse ordering
@@ -92,35 +94,57 @@ def harrisCornerDetection(image):
     y = largest % R.shape[1]
     fPoint = list(zip(x.tolist(), y.tolist()))
 
+    # remove edge features
+    tmp = []
+    for p in fPoint:
+        if p[0] < 2 or p[1] < 2 or p[0] >= R.shape[0] - 2 or p[1] >= R.shape[1] - 2:
+            tmp.append(p)
+    for p in tmp:
+        fPoint.remove(p)
+    del tmp
 
+    # 2*2 max pooling
+    maxPool = set({})
+    for i in range(2,R.shape[0]-1, 2):
+        for j in range(2,R.shape[1]-1, 2):
+            tmp = [(R[i,j], (i,j)), (R[i+1,j], (i+1,j)), (R[i,j+1], (i,j+1)), (R[i+1, j+1], (i+1, j+1))]
+            maxPool.add(max(tmp)[1])
+
+    if showResult:
+        fPointOld = fPoint
+    fPoint = list(maxPool.intersection(set(fPoint)))
+
+    # find descriptors
     des = harrisDescriptor(grayscale, fPoint, 3)
     
-    return fPoint, des
 
+
+    if showResult:
     # output featured image
-    fImage = image
-    for point in fPoint:
-        fImage[point[0],point[1],0] = 255
-        fImage[point[0],point[1],1] = 0
-        fImage[point[0],point[1],2] = 0
-        
+        fImage = image
+        for point in fPointOld:
+            if point in fPoint:
+                fImage[point[0],point[1],0] = 255
+                fImage[point[0],point[1],1] = 0
+                fImage[point[0],point[1],2] = 0
+            else:
+                fImage[point[0],point[1],0] = 0
+                fImage[point[0],point[1],1] = 255
+                fImage[point[0],point[1],2] = 255
+
     
 
-    #dst = cv2.cornerHarris(grayscale, 5, 19, 1)
+        #dst = cv2.cornerHarris(grayscale, 5, 19, 1)
     
-    #m = np.zeros(S_xx.shape)
-    #for i in range(m.shape[0]):
-    #    for j in range(m.shape[1]):
-    #        if abs(R[i,j]) >= 1000000000000000:
-    #            m[i,j] = 255
 
-    #print(np.min(R), np.min(dst))
-    #print(np.max(R), np.max(dst))
+        #print(np.min(R), np.min(dst))
+        #print(np.max(R), np.max(dst))
 
-    cv2.imshow('image', fImage)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+        cv2.imshow('image', fImage)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
+    return fPoint, des
 
 def featureMatching(des1, des2, k=4):
     kdtree2 = KDTree.cKDTree(des2)
@@ -167,7 +191,7 @@ def printFeatureMatchPoints(nn, image1, image2, fPoint1, fPoint2):
     # caution, when drawing a line, the coord is (y, x), not (x, y)!!!!!!!!!!!!!!!!
     
     for x in nn:
-        if x[1][0][0] < 200. and x[1][0][0] <= 0.8 * x[1][0][1]:
+        if x[1][0][0] < 175. and x[1][0][0] <= 0.72 * x[1][0][1]:
             cv2.line(a, (fPoint1[x[0]][1], fPoint1[x[0]][0]), (fPoint2[x[2][0][0]][1] + image1.shape[1], fPoint2[x[2][0][0]][0] ), (55,555,155) )
             pass
 
