@@ -26,6 +26,6 @@ Project repositories for NTU VFX 2018 course
     - [x] image matching (RANSAC, translation)
     - [x] blending (linear, need refinement)
 - [ ] bonus (optional)
-- [ ] report
+- [ ] report (site: [HackMD](https://hackmd.io/l_sypVv6ThGt0U8aQK59uA))
 ### Note
 My teammate, where are you?
