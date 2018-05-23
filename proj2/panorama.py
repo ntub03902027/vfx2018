@@ -243,7 +243,7 @@ def harrisCornerDetection(image, showResult=False):
     # 0. define const.
     # k: empricially 0.04 - 0.06
     k = 0.05
-    bestPercent = 5
+    bestPercent = 10
     distortBufferValue = 5
     
     grayscale = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -382,7 +382,7 @@ def featureMatching(des1, des2, k=4, printAll=False):
     # i = indices of k nearest distance = indices for des2
     for n in range(len(des1)):
         d, i = kdtree2.query(des1[n], k=k)
-        if d[0] < 200. and d[0] <= 0.8 * d[1]:
+        if d[0] < 256. and d[0] <= 0.8 * d[1]:
             matchedPoints.append( (n, i[0]) )
     
     # 4. 
@@ -520,7 +520,47 @@ def ransac(matchedPoints, fPoints1, fPoints2, n=2, p=0.6, P=0.99, kMin=128):
 
 def imageStitch(trans, image1, image2, showResult=False, poisson=False, constant=-1):
 
+    """
+    Perform image stitching with blending.
 
+    Parameters
+    __________
+    trans : 2-tuple
+        denotes x-y translation
+
+    image1 : ndarray
+        input image 1
+    
+    image2: ndarray
+        input image 2
+
+    showResult : bool
+        show stitched result right after the process
+    
+    poisson : bool 
+        perform Poisson blending
+
+    constant : int 
+        width of constant-width blending  
+
+    
+    Returns
+    -------
+    result : ndarray
+        the result stitched image 
+    
+    (startX2, startY2): 2-tuple 
+        the displacement of the 2nd image that will be used in the next stitching iteration 
+
+    Implementation
+    -------------
+    1. compute starting points 
+    2. perform stitching and blending
+    2a. poisson 
+    2b. linear 
+    2c. linear with constant width
+    """
+    # 1. starting points
     startX1 = abs(min(trans[0], 0))
     startY1 = abs(min(trans[1], 0))
 
@@ -529,7 +569,7 @@ def imageStitch(trans, image1, image2, showResult=False, poisson=False, constant
 
     result = np.zeros([max(image1.shape[0] + startX1, image2.shape[0] + startX2), max(image1.shape[1] + startY1, image2.shape[1] + startY2), image1.shape[2]], dtype=np.uint8)
 
-
+    # 2a. poisson
     if poisson:
 
         mask = np.zeros([result.shape[0], result.shape[1]])
@@ -636,7 +676,8 @@ def imageStitch(trans, image1, image2, showResult=False, poisson=False, constant
 
         return bi, (startX2, startY2)
 
-
+    
+    # 2b-c. two linear blendings
     result[startX1:startX1+image1.shape[0],startY1:startY1+image1.shape[1],:] = image1[:,:,:]
 
     yOverlap = image1.shape[1] + image2.shape[1] - result.shape[1]
